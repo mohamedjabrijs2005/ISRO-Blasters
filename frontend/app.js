@@ -770,9 +770,9 @@ function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').re
 async function init() {
   tickClock(); setInterval(tickClock,1000);
   await loadScenarios();
-  connectWS();
+  // WebSockets disabled for serverless
   animateTopology();
-  setTimeout(()=>{ if(!S.snap) pollREST(); },4000);
+  pollREST();
 }
 
 document.addEventListener('DOMContentLoaded', init);

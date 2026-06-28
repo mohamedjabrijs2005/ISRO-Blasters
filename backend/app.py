@@ -45,54 +45,17 @@ app.add_middleware(
 FRONTEND_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "frontend")
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
-# ─── Background Simulation Loop ───────────────────────────────────────────────
+# ─── Serverless Simulation Logic ──────────────────────────────────────────────
 
-active_connections: list[WebSocket] = []
-prediction_cache: dict = {}
+def tick_simulation():
+    """Advance the simulation state by one tick for serverless environments."""
+    simulator.tick_update()
+    snap = simulator.get_snapshot()
+    preds = predictor.analyze_all(snap["history"])
+    oam_monitor.tick(snap.get("active_anomalies", []))
+    mission_monitor.tick()
+    return snap, preds
 
-
-async def simulation_loop():
-    """Tick simulator every 2 seconds and push to all WebSocket clients"""
-    global prediction_cache
-    while True:
-        await asyncio.sleep(2)
-        try:
-            simulator.tick_update()
-            snapshot = simulator.get_snapshot()
-            prediction_cache = predictor.analyze_all(snapshot["history"])
-            oam_monitor.tick(snapshot.get("active_anomalies", []))
-            mission_monitor.tick()
-
-            message = json.dumps({
-                "type": "telemetry_update",
-                "data": {
-                    "snapshot": snapshot,
-                    "predictions": prediction_cache,
-                    "oam_events": oam_monitor.get_recent(8),
-                    "missions": mission_monitor.get_all()
-                }
-            })
-
-            disconnected = []
-            for ws in active_connections:
-                try:
-                    await ws.send_text(message)
-                except Exception:
-                    disconnected.append(ws)
-
-            for ws in disconnected:
-                active_connections.remove(ws)
-
-        except Exception as e:
-            print(f"[SimLoop Error] {e}")
-
-
-@app.on_event("startup")
-async def startup():
-    asyncio.create_task(simulation_loop())
-    print("[Astraeus NOC] Backend started - Air-Gapped Mode Active")
-    print(f"   LLM Available: {copilot.llm_available}")
-    print(f"   LLM Model: {copilot.llm.model if copilot.llm_available else 'N/A (using rule-based fallback)'}", flush=True)
 
 
 # ─── Frontend Route ────────────────────────────────────────────────────────────
@@ -107,8 +70,7 @@ async def serve_frontend():
 @app.get("/api/status")
 async def api_status():
     """Current network snapshot"""
-    snap = simulator.get_snapshot()
-    preds = predictor.analyze_all(snap["history"])
+    snap, preds = tick_simulation()
     return {
         "status": "operational",
         "timestamp": datetime.utcnow().isoformat(),
@@ -127,8 +89,7 @@ async def api_status():
 @app.get("/api/topology")
 async def api_topology():
     """Network topology with real-time telemetry"""
-    snap = simulator.get_snapshot()
-    preds = prediction_cache if prediction_cache else predictor.analyze_all(snap["history"])
+    snap, preds = tick_simulation()
     return {
         "nodes": snap["nodes"],
         "lsps": snap["lsps"],
@@ -142,8 +103,7 @@ async def api_topology():
 @app.get("/api/telemetry")
 async def api_telemetry():
     """Full telemetry snapshot with predictions"""
-    snap = simulator.get_snapshot()
-    preds = prediction_cache if prediction_cache else predictor.analyze_all(snap["history"])
+    snap, preds = tick_simulation()
     return {"snapshot": snap, "predictions": preds}
 
 
@@ -264,7 +224,7 @@ async def api_oam():
 @app.get("/api/heatmap")
 async def api_heatmap():
     """LSP utilization heatmap data (time x LSP grid)"""
-    snap = simulator.get_snapshot()
+    snap, _ = tick_simulation()
     history = snap["history"]
     lsp_ids = [lsp["id"] for lsp in snap["lsps"]]
     # Build 20-point x N-LSP grid
@@ -273,54 +233,6 @@ async def api_heatmap():
         hist = history.get(lsp_id, [])[-20:]
         grid[lsp_id] = [round(h.get("utilization", 0) * 100, 1) for h in hist]
     return {"lsp_ids": lsp_ids, "grid": grid, "points": 20}
-
-# ─── WebSocket ────────────────────────────────────────────────────────────────
-
-@app.websocket("/ws")
-async def websocket_endpoint(ws: WebSocket):
-    await ws.accept()
-    active_connections.append(ws)
-    print(f"[WS] Client connected. Total: {len(active_connections)}")
-
-    try:
-        # Send initial state immediately
-        snap  = simulator.get_snapshot()
-        preds = predictor.analyze_all(snap["history"])
-        await ws.send_text(json.dumps({
-            "type": "initial_state",
-            "data": {
-                "snapshot": snap,
-                "predictions": preds,
-                "oam_events": oam_monitor.get_recent(8),
-                "missions": mission_monitor.get_all()
-            }
-        }))
-
-        while True:
-            msg = await ws.receive_text()
-            data = json.loads(msg)
-
-            if data.get("type") == "chat":
-                preds  = prediction_cache if prediction_cache else predictor.analyze_all(snap["history"])
-                result = copilot.query(data["query"], snap, preds)
-                await ws.send_text(json.dumps({"type": "chat_response", "data": result}))
-
-            elif data.get("type") == "inject_anomaly":
-                simulator.inject_anomaly(data.get("scenario", ""))
-                await ws.send_text(json.dumps({"type": "anomaly_injected", "scenario": data.get("scenario")}))
-
-            elif data.get("type") == "reroute":
-                result = simulator.accept_reroute(data["lsp_id"], data["via_node"])
-                await ws.send_text(json.dumps({"type": "reroute_result", "data": result}))
-
-    except WebSocketDisconnect:
-        active_connections.remove(ws)
-        print(f"[WS] Client disconnected. Total: {len(active_connections)}")
-    except Exception as e:
-        print(f"[WS Error] {e}")
-        if ws in active_connections:
-            active_connections.remove(ws)
-
 
 if __name__ == "__main__":
     import uvicorn
