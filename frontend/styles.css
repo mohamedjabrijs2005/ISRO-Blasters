@@ -409,6 +409,7 @@ body::after {
   font-size: 13px;
   font-weight: 700;
   line-height: 1.1;
+  white-space: nowrap;
 }
 
 .divider-v {
