@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: astraeus-noc
+    env: docker
+    plan: free
+    repo: https://github.com/mohamedjabrijs2005/ISRO-Blasters
+    branch: main
+    envVars:
+      - key: PORT
+        value: 10000
