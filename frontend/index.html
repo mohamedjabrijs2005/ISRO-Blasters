@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Astraeus NOC — ISRO MPLS Predictive Copilot</title>
+  <meta name="description" content="Air-gapped AI network operations copilot for ISRO's mission-critical MPLS infrastructure" />
+  <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    /* ── Mission Control Banner ─────────────────────────────────────── */
+    .mission-banner {
+      display: flex;
+      gap: 10px;
+      overflow-x: auto;
+      padding-bottom: 2px;
+      margin-bottom: 4px;
+    }
+    .mission-card {
+      flex-shrink: 0;
+      min-width: 200px;
+      max-width: 220px;
+      background: var(--glass-fill);
+      border: 1px solid var(--glass-stroke);
+      border-radius: var(--radius-lg);
+      padding: 12px 14px;
+      backdrop-filter: var(--glass-blur);
+      position: relative;
+      overflow: hidden;
+      cursor: default;
+      transition: border-color 0.2s;
+    }
+    .mission-card:hover { border-color: var(--glass-stroke-h); }
+    .mission-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: var(--mc, var(--blue-500));
+      opacity: 0.8;
+    }
+    .mission-card.active { border-color: rgba(16,185,129,0.15); }
+    .mission-card.standby { border-color: rgba(139,92,246,0.15); }
+    .mission-tag {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-family: var(--font-mono);
+      font-size: 8px; font-weight: 700;
+      letter-spacing: 1.2px; text-transform: uppercase;
+      padding: 2px 8px; border-radius: 4px; margin-bottom: 6px;
+    }
+    .mission-tag.active  { background: rgba(16,185,129,0.1);  color: var(--emerald-400); border:1px solid rgba(16,185,129,0.2); }
+    .mission-tag.standby { background: rgba(139,92,246,0.1);  color: var(--violet-400);  border:1px solid rgba(139,92,246,0.2); }
+    .mission-name {
+      font-family: var(--font-display); font-size: 11px; font-weight: 600;
+      color: var(--text-primary); margin-bottom: 2px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .mission-orbit {
+      font-family: var(--font-mono); font-size: 9px;
+      color: var(--text-tertiary); margin-bottom: 8px;
+    }
+    .mission-stats { display: flex; gap: 10px; }
+    .mission-stat label { display: block; font-size: 8px; font-family: var(--font-mono); color: var(--text-tertiary); letter-spacing: 0.8px; text-transform: uppercase; }
+    .mission-stat span  { font-family: var(--font-mono); font-size: 11px; font-weight: 600; color: var(--text-secondary); }
+    .mission-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; animation: dotBlink 1.5s ease-in-out infinite; }
+
+    /* ── OAM Events Panel ─────────────────────────────────────────── */
+    .oam-panel {
+      background: var(--glass-fill);
+      border: 1px solid var(--glass-stroke);
+      border-radius: var(--radius-xl);
+      overflow: hidden;
+      backdrop-filter: var(--glass-blur);
+    }
+    .oam-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--glass-stroke);
+    }
+    .oam-header h2 {
+      font-family: var(--font-display); font-size: 13px; font-weight: 600;
+      color: var(--text-secondary); display: flex; align-items: center; gap: 8px;
+    }
+    .oam-header h2::before {
+      content: ''; display: block; width: 3px; height: 14px;
+      background: linear-gradient(180deg, var(--cyan-500), var(--violet-500));
+      border-radius: 2px;
+    }
+    .oam-stats { display: flex; gap: 14px; }
+    .oam-stat { text-align: center; }
+    .oam-stat-val { font-family: var(--font-mono); font-size: 14px; font-weight: 700; line-height: 1; }
+    .oam-stat-lbl { font-family: var(--font-mono); font-size: 8px; color: var(--text-tertiary); letter-spacing: 0.8px; text-transform: uppercase; margin-top: 2px; }
+    .oam-body { max-height: 220px; overflow-y: auto; }
+    .oam-row {
+      display: flex; gap: 10px; align-items: flex-start;
+      padding: 8px 20px; border-bottom: 1px solid rgba(56,139,253,0.05);
+      transition: background 0.15s; font-size: 11.5px;
+      animation: alertIn 0.3s var(--ease-spring);
+    }
+    .oam-row:hover { background: rgba(0,0,0,0.02); }
+    .oam-row:last-child { border-bottom: none; }
+    .oam-sev {
+      width: 4px; height: 4px; border-radius: 50%; flex-shrink: 0;
+      margin-top: 6px;
+    }
+    .oam-sev.critical { background: var(--rose-400);    box-shadow: 0 0 5px var(--rose-400); }
+    .oam-sev.warning  { background: var(--amber-400);   box-shadow: 0 0 5px var(--amber-400); }
+    .oam-sev.info     { background: var(--emerald-400); }
+    .oam-type {
+      font-family: var(--font-mono); font-size: 9px; font-weight: 700;
+      color: var(--text-tertiary); letter-spacing: 0.6px;
+      flex-shrink: 0; min-width: 80px; margin-top: 2px;
+    }
+    .oam-msg { color: var(--text-primary); flex: 1; line-height: 1.45; }
+    .oam-time { font-family: var(--font-mono); font-size: 9px; color: var(--text-tertiary); flex-shrink: 0; margin-top: 2px; white-space: nowrap; }
+
+    /* ── Heatmap ──────────────────────────────────────────────────── */
+    .heatmap-card {
+      background: var(--glass-fill);
+      border: 1px solid var(--glass-stroke);
+      border-radius: var(--radius-lg);
+      padding: 16px;
+      backdrop-filter: var(--glass-blur);
+    }
+    .heatmap-title {
+      font-family: var(--font-mono); font-size: 11px; font-weight: 600;
+      color: var(--text-secondary); margin-bottom: 12px; display: flex;
+      align-items: center; justify-content: space-between;
+    }
+    .heatmap-grid { display: flex; flex-direction: column; gap: 4px; }
+    .heatmap-row  { display: flex; align-items: center; gap: 6px; }
+    .heatmap-label {
+      font-family: var(--font-mono); font-size: 9px;
+      color: var(--text-tertiary); width: 56px; text-align: right; flex-shrink: 0;
+    }
+    .heatmap-cells { display: flex; gap: 2px; flex: 1; }
+    .heatmap-cell {
+      flex: 1; height: 16px; border-radius: 2px;
+      transition: all 0.6s ease;
+      cursor: default;
+      position: relative;
+    }
+    .heatmap-cell:hover::after {
+      content: attr(data-val) '%';
+      position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+      background: rgba(255,255,255,0.95); color: var(--text-primary);
+      font-family: var(--font-mono); font-size: 9px;
+      padding: 2px 6px; border-radius: 4px; white-space: nowrap;
+      border: 1px solid var(--glass-stroke); pointer-events: none;
+      z-index: 10;
+    }
+    .heatmap-legend {
+      display: flex; gap: 8px; align-items: center; margin-top: 8px;
+      justify-content: flex-end;
+    }
+    .heatmap-legend span { font-family: var(--font-mono); font-size: 9px; color: var(--text-tertiary); }
+    .heatmap-legend-bar {
+      height: 8px; width: 80px; border-radius: 2px;
+      background: linear-gradient(90deg, #10b981, #f59e0b, #f43f5e);
+    }
+
+    /* ── Two-col bottom row ──────────────────────────────────────── */
+    .bottom-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    /* ── Label Table (new) ───────────────────────────────────────── */
+    .label-table-card {
+      background: var(--glass-fill);
+      border: 1px solid var(--glass-stroke);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      backdrop-filter: var(--glass-blur);
+    }
+    .label-table-head {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--glass-stroke);
+      font-family: var(--font-display); font-size: 12px; font-weight: 600;
+      color: var(--text-secondary); display: flex; align-items: center; gap: 8px;
+    }
+    .label-table-head::before {
+      content: ''; display: block; width: 3px; height: 13px;
+      background: linear-gradient(180deg, var(--violet-500), var(--blue-500));
+      border-radius: 2px;
+    }
+    table.label-tbl {
+      width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: 10px;
+    }
+    table.label-tbl th {
+      padding: 6px 14px; text-align: left;
+      color: var(--text-tertiary); font-weight: 600; letter-spacing: 0.8px;
+      text-transform: uppercase; border-bottom: 1px solid rgba(56,139,253,0.08);
+      font-size: 9px;
+    }
+    table.label-tbl td {
+      padding: 6px 14px; color: var(--text-primary);
+      border-bottom: 1px solid rgba(56,139,253,0.04);
+    }
+    table.label-tbl tr:last-child td { border-bottom: none; }
+    table.label-tbl tr:hover td { background: rgba(0,0,0,0.02); }
+    .lbl-in  { color: var(--cyan-400);    font-weight: 600; }
+    .lbl-out { color: var(--violet-400);  font-weight: 600; }
+    .lbl-pri.critical { color: var(--rose-400);    font-weight: 700; }
+    .lbl-pri.high     { color: var(--amber-400);   font-weight: 600; }
+    .lbl-pri.medium   { color: var(--blue-400); }
+
+    /* ── Scrollbar for OAM ───────────────────────────────────────── */
+    .oam-body::-webkit-scrollbar { width: 3px; }
+    .oam-body::-webkit-scrollbar-thumb { background: rgba(59,130,246,0.1); }
+
+    /* ── bottom rail scroll ──────────────────────────────────────── */
+    .mission-banner::-webkit-scrollbar { height: 3px; }
+    .mission-banner::-webkit-scrollbar-thumb { background: rgba(59,130,246,0.1); }
+  </style>
+</head>
+<body>
+
+<!-- ══ LOADING ───────────────────────────────────────────────────────────────── -->
+<div class="loading-overlay" id="loading-overlay">
+  <div class="loading-logo-ring">
+    <div class="loading-logo">🛰️</div>
+  </div>
+  <div class="loading-wordmark">
+    <h1>Astraeus NOC</h1>
+    <p>ISRO · Air-Gapped · MPLS Predictive Copilot</p>
+  </div>
+  <div class="loading-progress"><div class="loading-progress-bar"></div></div>
+</div>
+
+<!-- ══ TOPBAR ─────────────────────────────────────────────────────────────────── -->
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-icon">🛰️</div>
+    <div class="brand-text">
+      <h1>Astraeus NOC</h1>
+      <p>ISRO · Air-Gapped · MPLS Predictive Copilot</p>
+    </div>
+  </div>
+
+  <nav class="topbar-nav">
+    <button class="nav-pill active" onclick="scrollTo(0,0)">Dashboard</button>
+    <button class="nav-pill" onclick="sendSuggestion('Give me a full network health and prediction summary')">Predictions</button>
+    <button class="nav-pill" onclick="sendSuggestion('List all OAM events and fault status on the network')">OAM Events</button>
+    <button class="nav-pill" onclick="sendSuggestion('Give me a traffic engineering report for all LSPs')">Traffic TE</button>
+  </nav>
+
+  <div class="topbar-right">
+    <div class="health-chip healthy" id="health-chip">
+      <div class="health-dot"></div>
+      <span id="health-text">HEALTHY</span>
+    </div>
+    <div class="divider-v"></div>
+    <div class="topbar-stat">
+      <span class="topbar-stat-label">Risk Score</span>
+      <span class="topbar-stat-val" id="risk-score-val" style="color:var(--emerald-400)">0 / 100</span>
+    </div>
+    <div class="topbar-stat">
+      <span class="topbar-stat-label">Alerts</span>
+      <span class="topbar-stat-val" id="alert-count-val" style="color:var(--amber-400)">0</span>
+    </div>
+    <div class="divider-v"></div>
+    <div class="ai-badge">
+      <div class="ai-badge-dot"></div>
+      <span id="ai-badge-text">AI: Connecting</span>
+    </div>
+    <div class="clock" id="clock">--:--:-- IST</div>
+  </div>
+</header>
+
+<!-- ══ APP SHELL ──────────────────────────────────────────────────────────────── -->
+<div class="app-shell">
+
+  <!-- ── MAIN ──────────────────────────────────────────────────────────────── -->
+  <main class="main-content">
+
+    <!-- KPI Strip -->
+    <div class="metric-strip">
+      <div class="metric-card" style="--m-color:var(--emerald-400)">
+        <div class="metric-label">Nodes Online</div>
+        <div class="metric-value" id="m-nodes">6/6</div>
+        <div class="metric-sub">Ground Stations</div>
+        <div class="metric-icon">🏛️</div>
+      </div>
+      <div class="metric-card" style="--m-color:var(--blue-400)">
+        <div class="metric-label">Active LSPs</div>
+        <div class="metric-value" id="m-lsps">8/8</div>
+        <div class="metric-sub">Label Switched Paths</div>
+        <div class="metric-icon">🔀</div>
+      </div>
+      <div class="metric-card" style="--m-color:var(--amber-400)">
+        <div class="metric-label">Peak Utilization</div>
+        <div class="metric-value" id="m-util">--%</div>
+        <div class="metric-sub">Highest LSP load</div>
+        <div class="metric-icon">📊</div>
+      </div>
+      <div class="metric-card" style="--m-color:var(--cyan-400)">
+        <div class="metric-label">Avg Latency</div>
+        <div class="metric-value" id="m-lat">-- ms</div>
+        <div class="metric-sub">Network average</div>
+        <div class="metric-icon">⚡</div>
+      </div>
+      <div class="metric-card" style="--m-color:var(--rose-400)">
+        <div class="metric-label">Active Alerts</div>
+        <div class="metric-value" id="m-alerts">0</div>
+        <div class="metric-sub">Predictive warnings</div>
+        <div class="metric-icon">🔔</div>
+      </div>
+    </div>
+
+    <!-- Overview & Briefing -->
+    <div class="section-head" style="margin-top: 12px;">
+      <h2>Mission Overview & Briefing</h2>
+    </div>
+    <div class="overview-card" style="display: flex; gap: 24px; background: var(--glass-fill); border: 1px solid var(--glass-stroke); border-radius: var(--radius-lg); padding: 24px; backdrop-filter: var(--glass-blur); margin-bottom: 24px; flex-wrap: wrap;">
+      <div style="flex: 1; min-width: 300px;">
+        <h3 style="font-family: var(--font-display); font-size: 18px; color: var(--text-primary); margin-bottom: 12px;">Astraeus NOC Operations</h3>
+        <p style="font-size: 14px; color: var(--text-secondary); line-height: 1.7; margin-bottom: 16px;">
+          Welcome to the Astraeus Network Operations Center. This predictive AI copilot monitors ISRO's mission-critical MPLS ground station infrastructure in real-time. Operating in a 100% air-gapped environment, it leverages machine learning to forecast network congestion and failures up to 15 minutes before they occur.
+        </p>
+        <p style="font-size: 14px; color: var(--text-secondary); line-height: 1.7;">
+          Operators can use the AI assistant for natural language queries, fast rerouting of Label Switched Paths (LSPs), and real-time fault analysis, ensuring zero downtime for critical space tracking telemetry.
+        </p>
+      </div>
+      <div style="flex: 1; min-width: 300px; border-radius: 12px; overflow: hidden; border: 1px solid var(--glass-stroke); box-shadow: var(--shadow-sm);">
+        <iframe width="100%" height="240" src="https://www.youtube.com/embed/5BSmSRj7QZ0" title="ISRO Ground Station Overview" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen style="display: block;"></iframe>
+      </div>
+    </div>
+
+    <!-- Mission Control Banner -->
+    <div class="section-head">
+      <h2>Active ISRO Missions</h2>
+      <span style="font-size:9px;font-family:var(--font-mono);color:var(--text-tertiary);letter-spacing:1px;">LIVE TELEMETRY CONTEXT</span>
+    </div>
+    <div class="mission-banner" id="mission-banner"></div>
+
+    <!-- Node Rail -->
+    <div class="section-head"><h2>Ground Station Nodes</h2></div>
+    <div class="node-rail" id="node-rail"></div>
+
+    <!-- Topology -->
+    <div class="topology-card">
+      <div class="topology-card-header">
+        <h2>MPLS Network Topology — Live</h2>
+        <div class="topo-controls">
+          <button class="btn btn-ghost" onclick="resetTopologyView()">⟳ Reset</button>
+          <select class="filter-select" id="lsp-filter" onchange="filterLSPs(this.value)">
+            <option value="all">All LSPs</option>
+            <option value="critical">Critical only</option>
+            <option value="warning">Warning+</option>
+          </select>
+        </div>
+      </div>
+      <canvas id="topology-canvas"></canvas>
+      <div class="topo-legend">
+        <div class="legend-item"><div class="legend-dot" style="background:var(--blue-400);box-shadow:0 0 4px var(--blue-glow)"></div>LER (Edge)</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--cyan-400);box-shadow:0 0 4px var(--cyan-glow)"></div>LSR (Core)</div>
+        <div class="legend-item"><div class="legend-line" style="background:var(--emerald-400)"></div>Nominal</div>
+        <div class="legend-item"><div class="legend-line" style="background:var(--amber-400)"></div>Warning</div>
+        <div class="legend-item"><div class="legend-line" style="background:var(--rose-400)"></div>Critical/Down</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--blue-400);width:6px;height:6px;border-radius:50%"></div>Packet Flow</div>
+      </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="section-head"><h2>Telemetry + Forecast</h2></div>
+    <div class="charts-strip">
+      <div class="chart-tile">
+        <div class="chart-tile-header">
+          <span class="chart-tile-title">LSP-101 · SDSC→BLR · Utilization %</span>
+          <span class="forecast-tag">▸ FORECAST</span>
+        </div>
+        <canvas class="mini-chart" id="chart-lsp101"></canvas>
+      </div>
+      <div class="chart-tile">
+        <div class="chart-tile-header">
+          <span class="chart-tile-title">LSP-103 · PortBlair→BLR · Latency ms</span>
+          <span class="forecast-tag">▸ FORECAST</span>
+        </div>
+        <canvas class="mini-chart" id="chart-lsp103"></canvas>
+      </div>
+    </div>
+
+    <!-- Alerts -->
+    <div class="alerts-panel">
+      <div class="alerts-header">
+        <h2>Predictive Alerts</h2>
+        <span class="alert-count-badge zero" id="alert-count-badge">0 alerts</span>
+      </div>
+      <div class="alerts-body" id="alerts-body">
+        <div class="no-alert-state">
+          <div class="no-alert-icon">✅</div>
+          <div>All systems nominal</div>
+          <div style="font-size:10px;color:var(--text-tertiary)">No predictive alerts at this time</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- LSP Grid + Label Table row -->
+    <div class="section-head">
+      <h2>LSP Status Board</h2>
+      <select class="filter-select" id="lsp-filter-grid" onchange="filterLSPs(this.value)">
+        <option value="all">All LSPs</option>
+        <option value="critical">Critical</option>
+        <option value="warning">Warning+</option>
+      </select>
+    </div>
+    <div class="lsp-grid" id="lsp-grid"></div>
+
+    <!-- Bottom Row: Heatmap + OAM Events -->
+    <div class="section-head"><h2>Network Intelligence</h2></div>
+    <div class="bottom-row">
+      <!-- Heatmap -->
+      <div class="heatmap-card">
+        <div class="heatmap-title">
+          <span>LSP Utilization Heatmap (Last 20 readings)</span>
+          <span style="font-size:9px;color:var(--text-tertiary)">Older → Newer</span>
+        </div>
+        <div class="heatmap-grid" id="heatmap-grid"></div>
+        <div class="heatmap-legend">
+          <span>0%</span>
+          <div class="heatmap-legend-bar"></div>
+          <span>100%</span>
+        </div>
+      </div>
+
+      <!-- Label Table -->
+      <div class="label-table-card">
+        <div class="label-table-head">MPLS Label Forwarding Table</div>
+        <table class="label-tbl" id="label-tbl">
+          <thead>
+            <tr>
+              <th>LSP</th>
+              <th>In Label</th>
+              <th>Out Label</th>
+              <th>Type</th>
+              <th>Priority</th>
+            </tr>
+          </thead>
+          <tbody id="label-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- OAM Events Feed -->
+    <div class="section-head"><h2>OAM Events Feed</h2></div>
+    <div class="oam-panel">
+      <div class="oam-header">
+        <h2>OAM — Operations, Administration & Maintenance</h2>
+        <div class="oam-stats" id="oam-stats">
+          <div class="oam-stat"><div class="oam-stat-val" id="oam-total" style="color:var(--text-secondary)">0</div><div class="oam-stat-lbl">Total</div></div>
+          <div class="oam-stat"><div class="oam-stat-val" id="oam-crit"  style="color:var(--rose-400)">0</div><div class="oam-stat-lbl">Critical</div></div>
+          <div class="oam-stat"><div class="oam-stat-val" id="oam-warn"  style="color:var(--amber-400)">0</div><div class="oam-stat-lbl">Warning</div></div>
+          <div class="oam-stat"><div class="oam-stat-val" id="oam-frr"   style="color:var(--violet-400)">0</div><div class="oam-stat-lbl">FRR</div></div>
+        </div>
+      </div>
+      <div class="oam-body" id="oam-body"></div>
+    </div>
+
+    <div style="height:24px"></div>
+  </main>
+
+  <!-- ── SIDE PANEL: AI COPILOT ─────────────────────────────────────────────── -->
+  <aside class="side-content">
+    <div class="chat-topbar">
+      <div class="chat-identity">
+        <div class="ai-orb">🤖</div>
+        <div class="ai-info">
+          <h3>Astraeus AI</h3>
+          <div class="ai-mode" id="ai-mode-text" style="color:var(--amber-400)">● Rule-Based Offline Mode</div>
+        </div>
+      </div>
+      <button class="btn btn-ghost" onclick="clearChat()" style="padding:5px 10px;">🗑</button>
+    </div>
+
+    <div class="chat-body" id="chat-body">
+      <div class="message ai">
+        <div class="msg-orb">🤖</div>
+        <div class="msg-content">
+          <div class="msg-bubble">
+Astraeus NOC online. Monitoring all 8 LSPs + 4 active ISRO missions.
+
+I can predict failures 5–15 min ahead, explain OAM events, and guide rerouting.
+
+Try:
+• "Which LSPs are at risk?"
+• "Explain PSLV-C60 telemetry impact"
+• "Show OAM events for LSP-103"
+• "How do I reroute for fiber cut?"
+          </div>
+          <div class="msg-time">Astraeus · System boot</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="chat-foot">
+      <div class="suggestions-row">
+        <button class="suggestion" onclick="sendSuggestion('Which LSPs are at risk right now?')">⚠ Risk</button>
+        <button class="suggestion" onclick="sendSuggestion('Show all LSP utilization levels')">📊 Util</button>
+        <button class="suggestion" onclick="sendSuggestion('What active anomalies are detected?')">🔴 Events</button>
+        <button class="suggestion" onclick="sendSuggestion('How do I reroute if LSP-103 fails?')">🔀 Reroute</button>
+        <button class="suggestion" onclick="sendSuggestion('Explain OAM fault detection procedure')">📋 OAM</button>
+        <button class="suggestion" onclick="sendSuggestion('PSLV-C60 telemetry status and LSP impact')">🚀 Mission</button>
+      </div>
+      <div class="input-row">
+        <textarea class="chat-textarea" id="chat-input"
+          placeholder="Ask about the network, missions, OAM events..."
+          rows="1" onkeydown="handleKey(event)" oninput="autoGrow(this)"></textarea>
+        <button class="send-btn" id="send-btn" onclick="sendChat()">➤</button>
+      </div>
+    </div>
+
+    <div class="scenario-drawer">
+      <div class="scenario-drawer-label">Inject Demo Scenario</div>
+      <div class="scenario-list" id="scenario-list"></div>
+    </div>
+  </aside>
+</div>
+
+<div class="toasts" id="toasts"></div>
+<script src="/static/app.js"></script>
+</body>
+</html>
