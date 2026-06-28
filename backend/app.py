@@ -162,7 +162,7 @@ async def api_chat(req: ChatRequest):
         raise HTTPException(400, "Query cannot be empty")
 
     snap  = simulator.get_snapshot()
-    preds = prediction_cache if prediction_cache else predictor.analyze_all(snap["history"])
+    preds = predictor.analyze_all(snap["history"])
     result = copilot.query(req.query, snap, preds)
     return result
 
